@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#011640">
+  <title>Despliegue web · Frontend + API</title>
+  <meta name="description" content="Práctica de despliegue web: frontend en Vercel consumiendo una API en Render.">
+  <style>
+    :root {
+      /* Paleta obligatoria */
+      --navy-deep: #011640;      /* Azul marino profundo: base, cabecera, paneles oscuros */
+      --navy-intense: #020873;   /* Azul marino intenso: botones, valores y elementos destacados */
+      --aqua: #00FFFF;           /* Cian aqua: acentos, iconos, bordes y estados interactivos */
+      --white: #FFFFFF;          /* Blanco: tarjetas y texto sobre fondos oscuros */
+      --ink: #202936;            /* Negro suave: texto sobre fondos claros */
+      --mist: #F0F8FF;           /* Blanco azulado: fondo general y superficies secundarias */
+
+      /* Tonos derivados (mantienen el contraste AA) */
+      --ink-soft: #4B5668;       /* Texto secundario sobre claro */
+      --line: #CBD9EE;           /* Bordes sobre superficies claras */
+      --on-dark-soft: rgba(255, 255, 255, .78); /* Texto secundario sobre oscuro */
+      --danger: #B42318;         /* Error sobre claro */
+      --danger-soft: #FEF3F2;
+      --danger-on-dark: #FF9C94; /* Error sobre oscuro */
+
+      --radius: 14px;
+      --radius-sm: 10px;
+      --shadow: 0 8px 24px rgba(1, 22, 64, .12);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.55;
+      color: var(--ink);
+      background: var(--mist);
+      padding: 32px 16px 48px;
+    }
+
+    .wrap { max-width: 860px; margin: 0 auto; }
+
+    /* ---------- Cabecera (superficie oscura principal) ---------- */
+    header {
+      margin-bottom: 24px;
+      padding: 28px 28px 24px;
+      border-radius: var(--radius);
+      color: var(--white);
+      background: linear-gradient(135deg, var(--navy-deep) 0%, var(--navy-deep) 60%, var(--navy-intense) 100%);
+      border-bottom: 3px solid var(--aqua);
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 10px;
+      font-size: .78rem; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--aqua); font-weight: 600;
+    }
+    .eyebrow::before { content: ""; width: 24px; height: 2px; border-radius: 2px; background: var(--aqua); }
+    h1 {
+      margin: 10px 0 8px;
+      font-size: clamp(1.6rem, 4.5vw, 2.3rem);
+      line-height: 1.15; letter-spacing: -.02em; color: var(--white);
+    }
+    h1 span { background: linear-gradient(transparent 86%, var(--aqua) 86%); }
+    .lead { color: var(--on-dark-soft); max-width: 60ch; }
+
+    /* ---------- Flujo de arquitectura ---------- */
+    .flow {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+      margin-top: 18px; font-size: .85rem;
+    }
+    .chip {
+      padding: 6px 12px; border-radius: 999px; font-weight: 600;
+      color: var(--white); border: 1px solid rgba(255, 255, 255, .28);
+      background: rgba(255, 255, 255, .06);
+    }
+    .chip.front { background: var(--navy-intense); border-color: rgba(255, 255, 255, .4); }
+    .chip.api { color: var(--aqua); border-color: var(--aqua); background: transparent; }
+    .arrow { color: var(--on-dark-soft); }
+
+    /* ---------- Tarjeta principal ---------- */
+    .card {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .card-head {
+      display: flex; flex-wrap: wrap; gap: 12px;
+      align-items: center; justify-content: space-between;
+      padding: 16px 22px; background: var(--navy-deep); color: var(--white);
+    }
+    .endpoint {
+      font-family: Consolas, "SFMono-Regular", Menlo, monospace;
+      font-size: .9rem; color: var(--on-dark-soft); word-break: break-all;
+    }
+    .endpoint b { color: var(--aqua); font-weight: 700; margin-right: 8px; }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 5px 14px; border-radius: 999px;
+      font-size: .82rem; font-weight: 700; border: 1px solid transparent;
+    }
+    .badge .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+    .badge.loading { color: var(--white); border-color: rgba(255, 255, 255, .35); }
+    .badge.loading .dot { background: var(--aqua); animation: pulse 1s ease-in-out infinite; }
+    .badge.ok { color: var(--white); border-color: var(--aqua); background: rgba(0, 255, 255, .1); }
+    .badge.ok .dot { background: var(--aqua); }
+    .badge.fail { color: var(--danger-on-dark); border-color: var(--danger-on-dark); background: rgba(255, 156, 148, .1); }
+
+    .card-body { padding: 22px; min-height: 220px; }
+    [hidden] { display: none !important; }
+
+    /* ---------- Cargando ---------- */
+    .loading-box { text-align: center; padding: 36px 8px; }
+    .spinner {
+      width: 44px; height: 44px; margin: 0 auto 16px; border-radius: 50%;
+      border: 4px solid var(--line); border-top-color: var(--navy-intense);
+      animation: spin .8s linear infinite;
+    }
+    .loading-box strong { font-size: 1.1rem; color: var(--navy-intense); }
+    .loading-box p { color: var(--ink-soft); font-size: .92rem; margin-top: 6px; }
+    #slow-note {
+      display: inline-block; margin-top: 12px; padding: 8px 14px;
+      border-radius: var(--radius-sm); background: var(--mist);
+      border: 1px solid var(--line); color: var(--ink);
+    }
+
+    /* ---------- Éxito ---------- */
+    .message {
+      display: flex; gap: 12px; align-items: center;
+      padding: 14px 16px; border-radius: var(--radius-sm); margin-bottom: 16px;
+      background: var(--mist); border: 1px solid var(--line);
+      border-left: 4px solid var(--navy-intense);
+    }
+    .message .tick {
+      flex: none; width: 28px; height: 28px; border-radius: 50%;
+      display: grid; place-items: center; font-weight: 800;
+      background: var(--navy-deep); color: var(--aqua);
+    }
+    .message small { display: block; color: var(--ink-soft); font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; }
+    .message p { font-weight: 600; color: var(--ink); }
+
+    .meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 22px; }
+    .meta div {
+      padding: 12px 14px; border-radius: var(--radius-sm);
+      background: var(--mist); border: 1px solid var(--line);
+    }
+    .meta small { display: block; color: var(--ink-soft); font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; }
+    .meta span { font-family: Consolas, "SFMono-Regular", Menlo, monospace; font-size: 1rem; font-weight: 700; color: var(--navy-intense); word-break: break-all; }
+
+    h2 {
+      display: flex; align-items: center; gap: 10px;
+      font-size: .8rem; text-transform: uppercase; letter-spacing: .12em;
+      color: var(--navy-intense); margin-bottom: 12px;
+    }
+    h2::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .field {
+      padding: 14px 16px; border-radius: var(--radius-sm);
+      background: var(--mist); border: 1px solid var(--line);
+      border-left: 4px solid var(--navy-intense);
+      transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+    }
+    .field:hover { border-color: var(--navy-intense); border-left-color: var(--aqua); box-shadow: var(--shadow); transform: translateY(-1px); }
+    .field small { display: block; color: var(--ink-soft); font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
+    .field strong { font-size: 1.05rem; color: var(--ink); word-break: break-word; }
+    .field.wide { grid-column: 1 / -1; }
+
+    /* Elemento destacado: el estudiante */
+    .field.wide { background: var(--navy-intense); border-color: var(--navy-intense); border-left-color: var(--aqua); }
+    .field.wide small { color: var(--aqua); }
+    .field.wide strong { color: var(--white); font-size: 1.15rem; }
+    .field.wide:hover { background: var(--navy-deep); border-color: var(--aqua); }
+
+    .timestamp {
+      margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--line);
+      display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between;
+      color: var(--ink-soft); font-size: .88rem;
+    }
+    .timestamp code {
+      font-family: Consolas, "SFMono-Regular", Menlo, monospace;
+      color: var(--navy-intense); font-weight: 700;
+    }
+
+    /* ---------- Error ---------- */
+    .error-box {
+      padding: 20px; border-radius: var(--radius-sm); text-align: center;
+      background: var(--danger-soft); border: 1px solid #F4B6B0;
+    }
+    .error-box .icon {
+      width: 44px; height: 44px; margin: 0 auto 12px; border-radius: 50%;
+      display: grid; place-items: center; font-size: 1.4rem; font-weight: 800;
+      background: var(--danger); color: var(--white);
+    }
+    .error-box h3 { margin-bottom: 6px; color: var(--ink); }
+    .error-box p { color: var(--ink-soft); font-size: .93rem; }
+    .error-box code {
+      display: inline-block; margin-top: 10px; padding: 4px 10px; border-radius: 8px;
+      background: var(--white); border: 1px solid #F4B6B0;
+      color: var(--danger); font-size: .85rem; word-break: break-all;
+    }
+    .tips { text-align: left; margin: 14px auto 0; max-width: 520px; color: var(--ink-soft); font-size: .88rem; padding-left: 20px; }
+    .tips code { margin-top: 0; padding: 1px 6px; color: var(--navy-intense); border-color: var(--line); }
+
+    /* ---------- Acciones y botón ---------- */
+    .actions {
+      padding: 16px 22px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+      background: var(--mist); border-top: 1px solid var(--line);
+    }
+    .btn {
+      font: inherit; font-weight: 700; cursor: pointer;
+      padding: 12px 22px; border-radius: var(--radius-sm);
+      color: var(--white); background: var(--navy-intense);
+      border: 2px solid var(--navy-intense);
+      transition: background .15s ease, border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+    }
+    .btn:hover:not(:disabled) { background: var(--navy-deep); border-color: var(--aqua); box-shadow: var(--shadow); transform: translateY(-1px); }
+    .btn:active:not(:disabled) { transform: translateY(0); box-shadow: none; background: var(--navy-deep); }
+    .btn:focus-visible { outline: 3px solid var(--navy-intense); outline-offset: 3px; }
+    .btn:disabled { cursor: not-allowed; color: var(--ink-soft); background: var(--line); border-color: var(--line); }
+    .hint { color: var(--ink-soft); font-size: .85rem; }
+
+    footer { margin-top: 24px; text-align: center; color: var(--ink-soft); font-size: .85rem; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { 50% { opacity: .3; } }
+    @media (prefers-reduced-motion: reduce) {
+      .spinner, .badge.loading .dot { animation-duration: 3s; }
+      .btn, .field { transition: none; }
+      .btn:hover:not(:disabled), .field:hover { transform: none; }
+    }
+    @media (max-width: 560px) {
+      body { padding: 16px 14px 32px; }
+      header { padding: 22px 18px 18px; }
+      .grid, .meta { grid-template-columns: 1fr; }
+      .card-body { padding: 18px; }
+      .actions { padding: 16px 18px; }
+      .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <span class="eyebrow">UVG Campus Altiplano · Despliegue web</span>
+      <h1>Frontend en <span>Vercel</span>, API en <span>Render</span></h1>
+      <p class="lead">Esta página es estática y, al cargar, pide los datos a una API independiente alojada en otra plataforma.</p>
+      <div class="flow" aria-label="Flujo de la aplicación">
+        <span class="chip">Navegador</span><span class="arrow">→</span>
+        <span class="chip front">Vercel · index.html</span><span class="arrow">→ fetch →</span>
+        <span class="chip api">Render · GET /test</span>
+      </div>
+    </header>
+
+    <main class="card" aria-live="polite">
+      <div class="card-head">
+        <div class="endpoint"><b>GET</b><span id="endpoint"></span></div>
+        <span id="badge" class="badge loading"><span class="dot"></span><span id="badge-text">Cargando</span></span>
+      </div>
+
+      <div class="card-body">
+        <!-- Estado: cargando -->
+        <section id="state-loading" class="loading-box">
+          <div class="spinner" aria-hidden="true"></div>
+          <strong>Cargando…</strong>
+          <p>Consultando la API.</p>
+          <p id="slow-note" hidden>El servicio gratuito de Render puede tardar cerca de un minuto en despertar. Gracias por esperar.</p>
+        </section>
+
+        <!-- Estado: éxito -->
+        <section id="state-success" hidden>
+          <div class="message">
+            <span class="tick" aria-hidden="true">✓</span>
+            <div><small>message</small><p id="f-message"></p></div>
+          </div>
+
+          <div class="meta">
+            <div><small>success</small><span id="f-success"></span></div>
+            <div><small>status</small><span id="f-status"></span></div>
+          </div>
+
+          <h2>data</h2>
+          <div class="grid">
+            <div class="field wide"><small>estudiante</small><strong id="f-estudiante"></strong></div>
+            <div class="field"><small>carne</small><strong id="f-carne"></strong></div>
+            <div class="field"><small>curso</small><strong id="f-curso"></strong></div>
+            <div class="field"><small>campus</small><strong id="f-campus"></strong></div>
+            <div class="field"><small>tecnologia</small><strong id="f-tecnologia"></strong></div>
+            <div class="field"><small>plataforma</small><strong id="f-plataforma"></strong></div>
+          </div>
+
+          <div class="timestamp">
+            <span>timestamp: <code id="f-timestamp"></code></span>
+            <span id="f-local"></span>
+          </div>
+        </section>
+
+        <!-- Estado: error -->
+        <section id="state-error" hidden>
+          <div class="error-box" role="alert">
+            <div class="icon" aria-hidden="true">!</div>
+            <h3>No se pudo obtener la información</h3>
+            <p id="error-text"></p>
+            <code id="error-detail"></code>
+            <ul class="tips">
+              <li>Verifica que la API esté en ejecución (local o en Render).</li>
+              <li>Si usa Render gratis, espera cerca de un minuto y reintenta.</li>
+              <li>Revisa que <code>API_URL</code> use https y no termine en “/”.</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+
+      <div class="actions">
+        <button id="reload" class="btn" type="button">Volver a consultar</button>
+        <span class="hint">Cada consulta devuelve un timestamp nuevo.</span>
+      </div>
+    </main>
+
+    <footer>Práctica de laboratorio · HTML + CSS + JavaScript puro · Sin frameworks</footer>
+  </div>
+
+  <script>
+    // URL de la API. Local: "http://localhost:3000". Producción: la URL https de Render, sin "/" al final.
+    const API_URL = "http://localhost:3000";
+
+    const $ = (id) => document.getElementById(id);
+    const states = { loading: $("state-loading"), success: $("state-success"), error: $("state-error") };
+    const badge = $("badge");
+    const reloadBtn = $("reload");
+    const FETCH_TIMEOUT_MS = 90000; // Render Free puede tardar ~1 minuto en despertar.
+
+    $("endpoint").textContent = API_URL + "/test";
+
+    function show(name) {
+      Object.entries(states).forEach(([key, el]) => { el.hidden = key !== name; });
+    }
+
+    function setBadge(kind, text) {
+      badge.className = "badge " + kind;
+      $("badge-text").textContent = text;
+    }
+
+    function renderData(json) {
+      const d = json.data || {};
+      $("f-message").textContent = json.message;
+      $("f-success").textContent = String(json.success);
+      $("f-status").textContent = String(json.status);
+      ["estudiante", "carne", "curso", "campus", "tecnologia", "plataforma"].forEach((key) => {
+        $("f-" + key).textContent = d[key] ?? "—";
+      });
+      $("f-timestamp").textContent = json.timestamp;
+      const local = new Date(json.timestamp);
+      $("f-local").textContent = isNaN(local) ? "" : "Hora local: " + local.toLocaleString("es-GT");
+    }
+
+    async function loadData() {
+      reloadBtn.disabled = true;
+      reloadBtn.textContent = "Consultando…";
+      setBadge("loading", "Cargando");
+      $("slow-note").hidden = true;
+      show("loading");
+
+      const slowTimer = setTimeout(() => { $("slow-note").hidden = false; }, 4000);
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(API_URL + "/test", { signal: controller.signal });
+        if (!response.ok) throw new Error("HTTP " + response.status + " " + response.statusText);
+        const json = await response.json();
+        renderData(json);
+        setBadge("ok", "Conectado · " + json.status);
+        show("success");
+      } catch (err) {
+        const timedOut = err.name === "AbortError";
+        $("error-text").textContent = timedOut
+          ? "La API tardó demasiado en responder."
+          : "La petición a la API falló.";
+        $("error-detail").textContent = timedOut ? "Tiempo de espera agotado" : err.message;
+        setBadge("fail", "Error");
+        show("error");
+      } finally {
+        clearTimeout(slowTimer);
+        clearTimeout(abortTimer);
+        reloadBtn.disabled = false;
+        reloadBtn.textContent = "Volver a consultar";
+      }
+    }
+
+    reloadBtn.addEventListener("click", loadData);
+    loadData();
+  </script>
+</body>
+</html>
